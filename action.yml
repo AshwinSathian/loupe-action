@@ -1,0 +1,92 @@
+name: Loupe Review
+description: Keyboard, contrast, reflow and text-spacing checks for web pages in a real browser, with baselines.
+author: Ashwin Sathian
+
+branding:
+  icon: search
+  color: blue
+
+inputs:
+  urls:
+    description: Pages to check, one per line. Only http and https URLs.
+    required: true
+  version:
+    description: loupe-review version to install. Exact version only (for example 2.1.0).
+    required: false
+    default: "2.1.0"
+  only:
+    description: Which checks to run, comma separated, from measure, interact and stress.
+    required: false
+    default: "measure,interact,stress"
+  browser:
+    description: chromium, webkit or firefox.
+    required: false
+    default: chromium
+  widths:
+    description: Viewport widths in pixels, comma separated. Empty uses loupe's defaults.
+    required: false
+    default: ""
+  wait-for:
+    description: CSS selector to wait for after each page loads. Empty waits for nothing extra.
+    required: false
+    default: ""
+  timeout:
+    description: Page load timeout in milliseconds.
+    required: false
+    default: "30000"
+  storage-state:
+    description: Path to a Playwright storage-state file, for pages behind a sign-in. Treat it as a secret.
+    required: false
+    default: ""
+  baseline:
+    description: Path to a baseline file written by `loupe --update-baseline`. With it, fail-on defaults to new.
+    required: false
+    default: ""
+  fail-on:
+    description: What fails the step - new, any or none. Empty means new with a baseline, otherwise any.
+    required: false
+    default: ""
+  summary:
+    description: Write the report to the job summary (true or false).
+    required: false
+    default: "true"
+
+outputs:
+  markdown:
+    description: Path to the markdown report.
+    value: ${{ steps.run.outputs.markdown }}
+  json:
+    description: Path to the JSON report, with every finding.
+    value: ${{ steps.run.outputs.json }}
+  exit-code:
+    description: loupe's exit code. 0 passed, 1 findings at the fail-on level, 2 invalid input, page-load or browser error. Empty if the action failed before loupe ran (the install step).
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install loupe-review
+      id: install
+      shell: bash
+      env:
+        LOUPE_VERSION: ${{ inputs.version }}
+        LOUPE_BROWSER: ${{ inputs.browser }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/install.sh"
+
+    - name: Run loupe
+      id: run
+      shell: bash
+      env:
+        LOUPE_URLS: ${{ inputs.urls }}
+        LOUPE_ONLY: ${{ inputs.only }}
+        LOUPE_BROWSER: ${{ inputs.browser }}
+        LOUPE_WIDTHS: ${{ inputs.widths }}
+        LOUPE_WAIT_FOR: ${{ inputs.wait-for }}
+        LOUPE_TIMEOUT: ${{ inputs.timeout }}
+        LOUPE_STORAGE_STATE: ${{ inputs.storage-state }}
+        LOUPE_BASELINE: ${{ inputs.baseline }}
+        LOUPE_FAIL_ON: ${{ inputs.fail-on }}
+        LOUPE_SUMMARY: ${{ inputs.summary }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/run.sh"

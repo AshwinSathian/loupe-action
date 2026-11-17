@@ -1,0 +1,215 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    name: Action (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Serve the test pages
+        run: |
+          cd test/pages
+          nohup python3 -m http.server 8801 >/dev/null 2>&1 &
+          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8801/clean.html >/dev/null
+
+      # 1. A clean page passes, with outputs that point at real files.
+      - name: A clean page passes
+        id: clean
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure,interact
+      - name: Outputs are real
+        env:
+          MD: ${{ steps.clean.outputs.markdown }}
+          JSON: ${{ steps.clean.outputs.json }}
+          CODE: ${{ steps.clean.outputs.exit-code }}
+        run: |
+          test "$CODE" = "0"
+          grep -q "## loupe" "$MD"
+          grep -q '"pages"' "$JSON"
+
+      # 2. A page with real problems fails the step with exit code 1, and each run keeps its own report.
+      - name: A page with real problems fails the step
+        id: bad
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/bad.html
+          only: measure,interact
+      - name: That was findings, and the first report is untouched
+        env:
+          OUTCOME: ${{ steps.bad.outcome }}
+          CODE: ${{ steps.bad.outputs.exit-code }}
+          JSON: ${{ steps.bad.outputs.json }}
+          CLEAN_JSON: ${{ steps.clean.outputs.json }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "1"
+          grep -q '"severity": "fail"' "$JSON"
+          test "$JSON" != "$CLEAN_JSON"
+          ! grep -q '"severity": "fail"' "$CLEAN_JSON"
+
+      # 3. fail-on none reports findings and passes.
+      - name: fail-on none reports but passes
+        id: none
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/bad.html
+          only: measure,interact
+          fail-on: none
+      - name: It still reported
+        env:
+          JSON: ${{ steps.none.outputs.json }}
+          CODE: ${{ steps.none.outputs.exit-code }}
+        run: |
+          test "$CODE" = "0"
+          grep -q '"severity": "fail"' "$JSON"
+
+      # 4. Baselines.
+      - name: Write a baseline with the installed loupe
+        run: |
+          "$RUNNER_TEMP/loupe-review/node_modules/.bin/loupe" http://127.0.0.1:8801/bad.html \
+            --only=measure,interact --baseline="$RUNNER_TEMP/baseline.json" --update-baseline
+      - name: The same page passes against its baseline
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/bad.html
+          only: measure,interact
+          baseline: ${{ runner.temp }}/baseline.json
+      - name: A page the baseline has never seen counts as all new
+        id: unseen
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/unseen.html
+          only: measure,interact
+          baseline: ${{ runner.temp }}/baseline.json
+      - name: That failure was new findings
+        env:
+          OUTCOME: ${{ steps.unseen.outcome }}
+          CODE: ${{ steps.unseen.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "1"
+      - name: A baseline path that does not exist is an error, not silent
+        id: nobase
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure
+          baseline: ${{ runner.temp }}/no-such-baseline.json
+      - name: Missing baseline check
+        env:
+          OUTCOME: ${{ steps.nobase.outcome }}
+          CODE: ${{ steps.nobase.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+
+      # 5. Options that reach loupe.
+      - name: wait-for, widths, storage-state and timeout reach loupe
+        id: opts
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure
+          widths: "390"
+          wait-for: h1, a, button, label
+          timeout: "20000"
+          storage-state: test/storage-state.json
+      - name: A selector that never appears is a load error, exit code 2
+        id: waitfail
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure
+          wait-for: "#does-not-exist"
+          timeout: "2000"
+      - name: Load error check
+        env:
+          OUTCOME: ${{ steps.waitfail.outcome }}
+          CODE: ${{ steps.waitfail.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+      - name: WebKit works
+        if: runner.os == 'Linux'
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure,interact
+          browser: webkit
+
+      # 6. Hostile input. Each is rejected by the specific check, proven by the exit-code output the
+      #    run step writes (a failure of any other kind would leave it empty), or by nothing executing.
+      - name: Option injection through urls is rejected
+        id: inject
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: |
+            --storage-state=/etc/passwd
+            http://127.0.0.1:8801/clean.html
+      - name: Injection check
+        env:
+          OUTCOME: ${{ steps.inject.outcome }}
+          CODE: ${{ steps.inject.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+      - name: A non-numeric timeout is rejected
+        id: badtimeout
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          timeout: abc
+      - name: Timeout check
+        env:
+          OUTCOME: ${{ steps.badtimeout.outcome }}
+          CODE: ${{ steps.badtimeout.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+      - name: A shell command in version is rejected and never runs
+        id: badver
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          version: '2.1.0; touch "$RUNNER_TEMP/pwned"'
+      - name: Version check
+        env:
+          OUTCOME: ${{ steps.badver.outcome }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test ! -e "$RUNNER_TEMP/pwned"
+
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash -n scripts/install.sh && bash -n scripts/run.sh
+      - run: shellcheck scripts/*.sh
