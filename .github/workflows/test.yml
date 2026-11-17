@@ -195,13 +195,77 @@ jobs:
         continue-on-error: true
         with:
           urls: http://127.0.0.1:8801/clean.html
-          version: '2.1.0; touch "$RUNNER_TEMP/pwned"'
+          version: '2.1.1; touch "$RUNNER_TEMP/pwned"'
       - name: Version check
         env:
           OUTCOME: ${{ steps.badver.outcome }}
+          CODE: ${{ steps.badver.outputs.exit-code }}
         run: |
           test "$OUTCOME" = "failure"
+          test -z "$CODE"
           test ! -e "$RUNNER_TEMP/pwned"
+      - name: A timeout of 0 is rejected
+        id: zerotimeout
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          timeout: "0"
+      - name: Zero timeout check
+        env:
+          OUTCOME: ${{ steps.zerotimeout.outcome }}
+          CODE: ${{ steps.zerotimeout.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+
+      # 7. A page that answers HTTP 404 is a load error, not a pass.
+      - name: A 404 page is a load error
+        id: notfound
+        uses: ./
+        continue-on-error: true
+        with:
+          urls: http://127.0.0.1:8801/does-not-exist.html
+          only: measure
+      - name: 404 check
+        env:
+          OUTCOME: ${{ steps.notfound.outcome }}
+          CODE: ${{ steps.notfound.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "2"
+      - name: allow-error-status measures it anyway
+        id: allowed
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/does-not-exist.html
+          only: measure
+          allow-error-status: "true"
+          fail-on: none
+      - name: It was measured, not rejected
+        env:
+          CODE: ${{ steps.allowed.outputs.exit-code }}
+          MD: ${{ steps.allowed.outputs.markdown }}
+        run: |
+          test "$CODE" = "0"
+          grep -q "## loupe" "$MD"
+
+      # 8. Asking for another version installs that version, and going back installs the first again.
+      - name: An older version is installed when asked for
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure
+          version: "2.1.0"
+      - name: Check the older version
+        run: test "$("$RUNNER_TEMP/loupe-review/node_modules/.bin/loupe" --version)" = "2.1.0"
+      - name: The default version replaces it
+        uses: ./
+        with:
+          urls: http://127.0.0.1:8801/clean.html
+          only: measure
+      - name: Check the default version
+        run: test "$("$RUNNER_TEMP/loupe-review/node_modules/.bin/loupe" --version)" = "2.1.1"
 
   shell:
     name: Shell scripts

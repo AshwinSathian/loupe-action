@@ -6,6 +6,9 @@ set -uo pipefail
 dir="${RUNNER_TEMP:?}/loupe-review"
 bin="$dir/node_modules/.bin/loupe"
 
+# Inputs are echoed only after control characters are replaced, so a value cannot add a workflow command.
+clean() { printf '%s' "${1//[$'\r\n']/ }"; }
+
 # Invalid input: report exit code 2 as an output, so a later step can tell this from a missing run.
 bad() {
   echo "::error title=Loupe Review::$1"
@@ -17,7 +20,7 @@ bad() {
 
 urls=()
 while IFS= read -r line; do
-  line="${line//$'\r'/}"
+  line="${line%$'\r'}"
   line="${line#"${line%%[![:space:]]*}"}"
   line="${line%"${line##*[![:space:]]}"}"
   [ -z "$line" ] && continue
@@ -31,9 +34,9 @@ if [ "${#urls[@]}" -eq 0 ]; then
 fi
 
 timeout_ms="${LOUPE_TIMEOUT:-30000}"
-[[ "$timeout_ms" =~ ^[0-9]+$ ]] || bad "timeout must be a number of milliseconds, got '$timeout_ms'"
+[[ "$timeout_ms" =~ ^[1-9][0-9]{0,8}$ ]] || bad "timeout must be a whole number of milliseconds from 1 to 999999999, got '$(clean "$timeout_ms")'"
 if [ -n "${LOUPE_BASELINE:-}" ] && [ ! -f "$LOUPE_BASELINE" ]; then
-  bad "baseline file not found: $LOUPE_BASELINE (write one with: loupe <url> --baseline <file> --update-baseline)"
+  bad "baseline file not found: $(clean "$LOUPE_BASELINE") (write one with: loupe <url> --baseline <file> --update-baseline)"
 fi
 
 # One directory per invocation, so a second run in the same job cannot overwrite or leak into the first.
@@ -47,6 +50,7 @@ args=("${urls[@]}" "--md=$md" "--json=$json" "--only=${LOUPE_ONLY:-measure,inter
 [ -n "${LOUPE_STORAGE_STATE:-}" ] && args+=("--storage-state=$LOUPE_STORAGE_STATE")
 [ -n "${LOUPE_BASELINE:-}" ] && args+=("--baseline=$LOUPE_BASELINE")
 [ -n "${LOUPE_FAIL_ON:-}" ] && args+=("--fail-on=$LOUPE_FAIL_ON")
+[ "${LOUPE_ALLOW_ERROR_STATUS:-false}" = "true" ] && args+=("--allow-error-status")
 
 "$bin" "${args[@]}"
 code=$?

@@ -2,15 +2,18 @@
 # Installs loupe-review (exact version, no install scripts) and the browser build its Playwright expects.
 set -euo pipefail
 
+# Inputs are echoed only after control characters are replaced, so a value cannot add a workflow command.
+clean() { printf '%s' "${1//[$'\r\n']/ }"; }
+
 version="${LOUPE_VERSION:-}"
 browser="${LOUPE_BROWSER:-chromium}"
 
 if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "::error title=Loupe Review::version must be an exact version such as 2.1.0, got '$version'"
+  echo "::error title=Loupe Review::version must be an exact version such as 2.1.1, got '$(clean "$version")'"
   exit 2
 fi
 case "$browser" in chromium | webkit | firefox) ;; *)
-  echo "::error title=Loupe Review::browser must be chromium, webkit or firefox, got '$browser'"
+  echo "::error title=Loupe Review::browser must be chromium, webkit or firefox, got '$(clean "$browser")'"
   exit 2
   ;; esac
 
@@ -22,7 +25,9 @@ fi
 
 dir="${RUNNER_TEMP:?}/loupe-review"
 marker="$dir/.installed-$version-$browser"
-if [ -f "$marker" ]; then
+installed="$(node -p "try{require('$dir/node_modules/loupe-review/package.json').version}catch(e){''}" 2>/dev/null || true)"
+# Skip only when this exact version and browser were installed and the package on disk is still that version.
+if [ -f "$marker" ] && [ "$installed" = "$version" ]; then
   echo "loupe-review $version with $browser is already installed in this job"
   exit 0
 fi

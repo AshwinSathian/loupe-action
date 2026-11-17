@@ -11,9 +11,9 @@ inputs:
     description: Pages to check, one per line. Only http and https URLs.
     required: true
   version:
-    description: loupe-review version to install. Exact version only (for example 2.1.0).
+    description: loupe-review version to install. Exact version only (for example 2.1.1).
     required: false
-    default: "2.1.0"
+    default: "2.1.1"
   only:
     description: Which checks to run, comma separated, from measure, interact and stress.
     required: false
@@ -46,6 +46,10 @@ inputs:
     description: What fails the step - new, any or none. Empty means new with a baseline, otherwise any.
     required: false
     default: ""
+  allow-error-status:
+    description: Measure pages that answer HTTP 400 or higher (true or false). By default such a page is a load error, because an error page has few problems of its own and would pass.
+    required: false
+    default: "false"
   summary:
     description: Write the report to the job summary (true or false).
     required: false
@@ -88,5 +92,6 @@ runs:
         LOUPE_BASELINE: ${{ inputs.baseline }}
         LOUPE_FAIL_ON: ${{ inputs.fail-on }}
         LOUPE_SUMMARY: ${{ inputs.summary }}
+        LOUPE_ALLOW_ERROR_STATUS: ${{ inputs.allow-error-status }}
         ACTION_PATH: ${{ github.action_path }}
       run: bash "$ACTION_PATH/scripts/run.sh"
