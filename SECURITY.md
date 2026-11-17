@@ -15,4 +15,4 @@ Report a vulnerability through [private vulnerability reporting](https://github.
 
 ## Supply chain
 
-The action uses no other actions at run time (no `uses:` steps). What it installs is one exact `loupe-review` version and that version's dependencies, which an `npm-shrinkwrap.json` inside the package locks, so the tree is the one the maintainer tested (the default version, 2.1.0, is the first to ship it). The action's own test workflow pins every action by commit SHA. `loupe-review` is published from GitHub Actions with npm trusted publishing, so each release carries signed provenance, and no npm token exists in its repository.
+The action uses no other actions at run time (no `uses:` steps). What it installs is one exact `loupe-review` version and that version's dependencies, which an `npm-shrinkwrap.json` inside the package locks, so the tree is the one the maintainer tested (2.1.0 was the first release to ship it). The action's own test workflow pins every action by commit SHA. `loupe-review` is published from GitHub Actions with npm trusted publishing, so each release carries signed provenance, and no npm token exists in its repository.

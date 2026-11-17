@@ -54,7 +54,7 @@ With `baseline` set, `fail-on` defaults to `new`. Fonts differ between machines,
 | Input | Default | |
 |---|---|---|
 | `urls` | required | Pages to check, one per line. `http` and `https` only. |
-| `version` | `2.1.0` | `loupe-review` version to install. Exact versions only. |
+| `version` | `2.1.1` | `loupe-review` version to install. Exact versions only. |
 | `only` | `measure,interact,stress` | Which checks to run. |
 | `browser` | `chromium` | `chromium`, `webkit` or `firefox`. WebKit is walked with Option-Tab, as Safari skips links on Tab. |
 | `widths` | loupe's defaults | Viewport widths in pixels, comma separated. |
@@ -63,6 +63,7 @@ With `baseline` set, `fail-on` defaults to `new`. Fonts differ between machines,
 | `storage-state` | none | Path to a Playwright storage-state file, for pages behind a sign-in. Treat it as a secret. |
 | `baseline` | none | Baseline file written by `loupe --update-baseline`. |
 | `fail-on` | `new` with a baseline, else `any` | `new`, `any` or `none`. |
+| `allow-error-status` | `false` | Measure pages that answer HTTP 400 or higher. By default such a page is a load error (exit code 2): an error page has few problems of its own and would pass. |
 | `summary` | `true` | Write the report to the job summary. |
 
 ## Outputs
