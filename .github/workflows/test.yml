@@ -235,11 +235,20 @@ jobs:
           test "$OUTCOME" = "failure"
           test "$CODE" = "2"
       - name: allow-error-status measures it anyway
+        id: allowed
         uses: ./
         with:
           urls: http://127.0.0.1:8801/does-not-exist.html
           only: measure
           allow-error-status: "true"
+          fail-on: none
+      - name: It was measured, not rejected
+        env:
+          CODE: ${{ steps.allowed.outputs.exit-code }}
+          MD: ${{ steps.allowed.outputs.markdown }}
+        run: |
+          test "$CODE" = "0"
+          grep -q "## loupe" "$MD"
 
       # 8. Asking for another version installs that version, and going back installs the first again.
       - name: An older version is installed when asked for
